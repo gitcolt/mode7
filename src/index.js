@@ -1,24 +1,50 @@
 import Course from './SuperMarioKartMapStarCup5.png';
 //import Course from './F-ZeroMap01MuteCity1.png';
+//import Background from './Chrysanthemum.jpg';
+import Background from './landscape.png';
+//import Course from './Koala.jpg';
 import Stats from 'stats-js';
 import * as dat from 'dat.gui';
 
-var img = new Image();
-img.onload = drawImage;
-img.src = Course;
-let can = document.querySelector('#can');
-let c = can.getContext('2d');
-let can2 = document.querySelector('#can2');
-let c2 = can2.getContext('2d');
+import Coin from './coinsprite.png';
 
-let worldX = 0;
-let worldY = 0;
-let worldA = 0;
-let near = 0.01;
-let far = 0.05;
-let fovHalf = Math.PI / 4;
+const courseImg = new Image();
+const backgroundImg = new Image();
+backgroundImg.src = Background;
+backgroundImg.onload = onBackgroundLoaded;
+courseImg.onload = onCourseImgLoaded;
+courseImg.src = Course;
+const hiddenCourseCan = document.querySelector('#hiddenCourseCanvas');
+const hiddenCourseCtx = hiddenCourseCan.getContext('2d');
+const hiddenBgCan = document.querySelector('#hiddenBackgroundCanvas');
+const hiddenBgCtx = hiddenBgCan.getContext('2d');
+const viewCan = document.querySelector('#viewCanvas');
+const viewCtx = viewCan.getContext('2d');
+viewCan.style.background = 'black';
 
-let srcImgData, srcImgDataPixels, stageImgData, stageImgDataPixels;
+const coinImage = new Image();
+coinImage.src = Coin;
+
+const p = {
+    x: 0,
+    y: 0,
+    a: 0,
+    velX: 0,
+    velY: 0
+};
+
+const camera = {
+    near: 0.01,
+    far: 0.03,
+    fovHalf: Math.PI / 4
+}
+
+const bgArea = {
+    x1: 0,
+    x2: 0.25
+};
+
+let srcImgData, srcImgDataPixels, stageImgData, stageImgDataPixels, backgroundImgData, backgroundImgDataPixels;
 let isTurningLeft = false;
 let isTurningRight = false;
 let isAccelerating = false;
@@ -27,30 +53,57 @@ const stats = new Stats();
 stats.setMode(0);
 document.body.appendChild(stats.domElement);
 
-let obj = {
-    name: 'Colt',
-    num: 23,
-    winner: true
-};
 const gui = new dat.GUI();
-gui.add(obj, 'name');
-gui.add(obj, 'num');
 
-function drawImage () {
-    can.width = this.naturalWidth;
-    can.height = this.naturalHeight;
-    can2.width = 500;
-    can2.height = 500;
-    c.imageSmoothingEnabled = false;
-    c2.imageSmoothingEnabled = false;
-    c.drawImage(this, 0, 0);
-    can.style.display = 'none';
-    srcImgData = c.getImageData(0, 0, can.width, can.height);
-    srcImgDataPixels = srcImgData.data;
-    stageImgData = c2.createImageData(can2.width, can2.height);
-    stageImgDataPixels = stageImgData.data;
-    c2.putImageData(srcImgData, 0, 0);
+function init () {
+    gui.add(camera, 'near', 0.0001, 1);
+    gui.add(camera, 'far', 0.001, 1);
+    gui.add(camera, 'fovHalf', 0.2, 3.14);
+
     loop();
+}
+
+function onBackgroundLoaded () {
+    hiddenBgCan.width = this.naturalWidth;
+    hiddenBgCan.height = this.naturalHeight;
+    hiddenBgCtx.drawImage(this, 0, 0);
+    backgroundImgData = hiddenBgCtx.getImageData(0, 0, hiddenBgCan.width, hiddenBgCan.height);
+    backgroundImgDataPixels = backgroundImgData.data;
+}
+
+function onCourseImgLoaded () {
+    hiddenCourseCan.width = this.naturalWidth;
+    hiddenCourseCan.height = this.naturalHeight;
+    viewCan.width = 300;
+    viewCan.height = 300;
+    hiddenCourseCtx.imageSmoothingEnabled = false;
+    viewCtx.imageSmoothingEnabled = false;
+    hiddenCourseCtx.drawImage(this, 0, 0);
+    stageImgData = viewCtx.createImageData(viewCan.width, viewCan.height);
+    stageImgDataPixels = stageImgData.data;
+
+    // Create track
+    for (let i = 0; i < 2; i++) {
+        hiddenCourseCtx.beginPath();
+        hiddenCourseCtx.moveTo(300, 300);
+        hiddenCourseCtx.bezierCurveTo(100, 300, 100, 600, 300, 600);
+        hiddenCourseCtx.lineTo(700, 600);
+        hiddenCourseCtx.bezierCurveTo(900, 600, 900, 300, 700, 300);
+        hiddenCourseCtx.lineTo(300, 300);
+        if (i === 0) {
+            hiddenCourseCtx.lineWidth = 70;
+            hiddenCourseCtx.strokeStyle = 'rgb(255, 0, 0)';
+        } else {
+            hiddenCourseCtx.lineWidth = 60;
+            hiddenCourseCtx.strokeStyle = 'rgb(123, 123, 123)';
+        }
+        hiddenCourseCtx.stroke();
+    }
+
+    srcImgData = hiddenCourseCtx.getImageData(0, 0, hiddenCourseCan.width, hiddenCourseCan.height);
+    srcImgDataPixels = srcImgData.data;
+
+    init();
 }
 document.addEventListener('keyup', (e) => {
     const keyName = e.key;
@@ -87,50 +140,90 @@ document.addEventListener('keydown', (e) => {
 function loop () {
     stats.begin();
 
-    let farX1 = worldX + Math.cos(worldA - fovHalf) * far;
-    let farY1 = worldY + Math.sin(worldA - fovHalf) * far;
+    let farX1 = p.x + Math.cos(p.a - camera.fovHalf) * camera.far;
+    let farY1 = p.y + Math.sin(p.a - camera.fovHalf) * camera.far;
 
-    let farX2 = worldX + Math.cos(worldA + fovHalf) * far;
-    let farY2 = worldY + Math.sin(worldA + fovHalf) * far;
+    let farX2 = p.x + Math.cos(p.a + camera.fovHalf) * camera.far;
+    let farY2 = p.y + Math.sin(p.a + camera.fovHalf) * camera.far;
 
-    let nearX1 = worldX + Math.cos(worldA - fovHalf) * near;
-    let nearY1 = worldY + Math.sin(worldA - fovHalf) * near;
+    let nearX1 = p.x + Math.cos(p.a - camera.fovHalf) * camera.near;
+    let nearY1 = p.y + Math.sin(p.a - camera.fovHalf) * camera.near;
 
-    let nearX2 = worldX + Math.cos(worldA + fovHalf) * near;
-    let nearY2 = worldY + Math.sin(worldA + fovHalf) * near;
+    let nearX2 = p.x + Math.cos(p.a + camera.fovHalf) * camera.near;
+    let nearY2 = p.y + Math.sin(p.a + camera.fovHalf) * camera.near;
 
-    for (let y = 1; y < (can2.height / 2); y++) {
-        let sampleDepth = y / (can2.height / 2);
+    for (let y = Math.floor(viewCan.height/3); y < viewCan.height; y+=2) {
+        let sampleDepth = (y-viewCan.height/3) / viewCan.height;
 
         let startX = (farX1 - nearX1) / (sampleDepth) + nearX1;
         let startY = (farY1 - nearY1) / (sampleDepth) + nearY1;
         let endX = (farX2 - nearX2) / (sampleDepth) + nearX2;
         let endY = (farY2 - nearY2) / (sampleDepth) + nearY2;
 
-        for (let x = 0; x < can2.width; x++) {
-            let sampleWidth = x / can2.width;
+        for (let x = 0; x < viewCan.width; x++) {
+            let sampleWidth = x / viewCan.width;
             let sampleX = (endX - startX) * sampleWidth + startX;
             let sampleY = (endY - startY) * sampleWidth + startY;
 
-            let imgIdx = Math.floor(sampleX*can.width) + Math.floor(sampleY*can.height)*can.width;
-            stageImgDataPixels[(x + y*can2.width)*4    ] = srcImgDataPixels[Math.round((imgIdx)*4)    ];
-            stageImgDataPixels[(x + y*can2.width)*4 + 1] = srcImgDataPixels[Math.round((imgIdx)*4) + 1];
-            stageImgDataPixels[(x + y*can2.width)*4 + 2] = srcImgDataPixels[Math.round((imgIdx)*4) + 2];
-            stageImgDataPixels[(x + y*can2.width)*4 + 3] = 255;
+            let imgIdx = Math.floor(sampleX*hiddenCourseCan.width) + Math.floor(sampleY*hiddenCourseCan.height)*hiddenCourseCan.width;
+            stageImgDataPixels[(x + y*viewCan.width)*4    ] = srcImgDataPixels[imgIdx*4    ];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 1] = srcImgDataPixels[imgIdx*4 + 1];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 2] = srcImgDataPixels[imgIdx*4 + 2];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 3] = 255;
+
+            if (imgIdx*4 > srcImgDataPixels.length || imgIdx*4 < 0) {
+                stageImgDataPixels[(x + y*viewCan.width)*4    ] = 0;
+                stageImgDataPixels[(x + y*viewCan.width)*4 + 1] = 255;
+                stageImgDataPixels[(x + y*viewCan.width)*4 + 2] = 0;
+                stageImgDataPixels[(x + y*viewCan.width)*4 + 3] = 255;
+            }
 
         }
     }
-    c2.putImageData(stageImgData, 0, 0);
 
-    if (isTurningLeft)
-        worldA -= 0.04;
-    else if (isTurningRight)
-        worldA += 0.04;
+    // Draw background landscape
+    for (let y = 0; y < viewCan.height/3; y+=2) {
+        let sampleHeight = y / (viewCan.height / 3);
+
+        for (let x = 0; x < viewCan.width; x++) {
+            let sampleWidth = x / viewCan.width; 
+
+            let sampleX = (bgArea.x2 - bgArea.x1) * sampleWidth + bgArea.x1;
+
+            let backgroundIdx = (Math.floor(sampleX*hiddenBgCan.width) + Math.floor(sampleHeight*hiddenBgCan.height)*hiddenBgCan.width)*4;
+            stageImgDataPixels[(x + y*viewCan.width)*4    ] = backgroundImgDataPixels[backgroundIdx    ];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 1] = backgroundImgDataPixels[backgroundIdx + 1];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 2] = backgroundImgDataPixels[backgroundIdx + 2];
+            stageImgDataPixels[(x + y*viewCan.width)*4 + 3] = 255;
+        }
+    }
+
+    viewCtx.putImageData(stageImgData, 0, 0);
+
+    // Input
+    let speed;
+    if (isTurningLeft) {
+        p.a -= 0.07;
+    } else if (isTurningRight) {
+        p.a += 0.07;
+    }
     if (isAccelerating) {
-        worldX += 0.01*Math.cos(worldA);
-        worldY += 0.01*Math.sin(worldA);
+        let roadIdx = Math.floor(p.x*hiddenCourseCan.width) + Math.floor(p.y*hiddenCourseCan.height)*hiddenCourseCan.width;
+        if (srcImgDataPixels[roadIdx*4    ] === 123 &&
+            srcImgDataPixels[roadIdx*4 + 1] === 123 &&
+            srcImgDataPixels[roadIdx*4 + 2] === 123) {
+            speed = 0.01;
+        } else {
+            speed = 0.005;
+        }
+        p.x += speed*Math.cos(p.a);
+        p.y += speed*Math.sin(p.a);
     } else {
     }
+
+    let t = bgArea.x2 - bgArea.x1;
+    bgArea.x1 = p.a / (Math.PI*2);
+    bgArea.x2 = bgArea.x1 + t;
 
     stats.end();
     requestAnimationFrame(loop);
