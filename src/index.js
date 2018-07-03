@@ -29,8 +29,7 @@ const p = {
     x: 0,
     y: 0,
     a: 0,
-    velX: 0,
-    velY: 0
+    speed: 0
 };
 
 const camera = {
@@ -56,8 +55,8 @@ document.body.appendChild(stats.domElement);
 const gui = new dat.GUI();
 
 function init () {
-    gui.add(camera, 'near', 0.0001, 1);
-    gui.add(camera, 'far', 0.001, 1);
+    gui.add(camera, 'near', 0.0001, 0.03);
+    gui.add(camera, 'far', 0.001, 0.075);
     gui.add(camera, 'fovHalf', 0.2, 3.14);
 
     loop();
@@ -137,6 +136,41 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+function processInput () {
+    if (p.speed > 0) {
+        if (isTurningLeft) {
+            p.a -= 0.07;
+        } else if (isTurningRight) {
+            p.a += 0.07;
+        }
+    }
+    if (isAccelerating) {
+        /*
+        // Player is faster when on the track
+        let roadIdx = Math.floor(p.x*hiddenCourseCan.width) + Math.floor(p.y*hiddenCourseCan.height)*hiddenCourseCan.width;
+        if (srcImgDataPixels[roadIdx*4    ] === 123 &&
+            srcImgDataPixels[roadIdx*4 + 1] === 123 &&
+            srcImgDataPixels[roadIdx*4 + 2] === 123) {
+            p.speed = 0.01;
+        } else {
+            p.speed = 0.005;
+        }
+        */
+
+        //p.x += p.speed*Math.cos(p.a);
+        //p.y += p.speed*Math.sin(p.a);
+        p.speed = Math.min(p.speed + 0.0005, 0.01);
+    } else {
+        p.speed = Math.max(p.speed - 0.0005, 0);
+    }
+    p.x += p.speed * Math.cos(p.a);
+    p.y += p.speed * Math.sin(p.a);
+
+    let t = bgArea.x2 - bgArea.x1;
+    bgArea.x1 = p.a / (Math.PI*2);
+    bgArea.x2 = bgArea.x1 + t;
+}
+
 function loop () {
     stats.begin();
 
@@ -200,30 +234,7 @@ function loop () {
 
     viewCtx.putImageData(stageImgData, 0, 0);
 
-    // Input
-    let speed;
-    if (isTurningLeft) {
-        p.a -= 0.07;
-    } else if (isTurningRight) {
-        p.a += 0.07;
-    }
-    if (isAccelerating) {
-        let roadIdx = Math.floor(p.x*hiddenCourseCan.width) + Math.floor(p.y*hiddenCourseCan.height)*hiddenCourseCan.width;
-        if (srcImgDataPixels[roadIdx*4    ] === 123 &&
-            srcImgDataPixels[roadIdx*4 + 1] === 123 &&
-            srcImgDataPixels[roadIdx*4 + 2] === 123) {
-            speed = 0.01;
-        } else {
-            speed = 0.005;
-        }
-        p.x += speed*Math.cos(p.a);
-        p.y += speed*Math.sin(p.a);
-    } else {
-    }
-
-    let t = bgArea.x2 - bgArea.x1;
-    bgArea.x1 = p.a / (Math.PI*2);
-    bgArea.x2 = bgArea.x1 + t;
+    processInput();
 
     stats.end();
     requestAnimationFrame(loop);
