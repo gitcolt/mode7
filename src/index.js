@@ -6,7 +6,8 @@ import Background from './landscape.png';
 import Stats from 'stats-js';
 import * as dat from 'dat.gui';
 
-import Coin from './coinsprite.png';
+//import Coin from './coinsprite.png';
+import BlueFalcon from './bluefalcon.png';
 
 const courseImg = new Image();
 const backgroundImg = new Image();
@@ -22,8 +23,10 @@ const viewCan = document.querySelector('#viewCanvas');
 const viewCtx = viewCan.getContext('2d');
 viewCan.style.background = 'black';
 
-const coinImage = new Image();
-coinImage.src = Coin;
+//const coinImage = new Image();
+//coinImage.src = Coin;
+const blueFalcon = new Image();
+blueFalcon.src = BlueFalcon;
 
 const p = {
     x: 0,
@@ -53,6 +56,36 @@ stats.setMode(0);
 document.body.appendChild(stats.domElement);
 
 const gui = new dat.GUI();
+
+class Sprite {
+    constructor(image, nFrames, context) {
+        this.image = image;
+        this.nFrames = nFrames;
+        this.context = context;
+        this.curFrame = 0;
+        this.frameWidth = this.image.width/nFrames;
+    }
+    
+    render () {
+        this.context.drawImage(this.image, this.curFrame*this.frameWidth, 0, this.image.width/this.nFrames, 40, viewCan.width/2 - (this.image.width/this.nFrames)/2, viewCan.height*2/3, this.image.width/this.nFrames, 40);
+    }
+}
+
+class PlayerKartSprite extends Sprite {
+    constructor (image, nFrames, context) {
+        super(image, nFrames, context);
+    }
+
+    update () {
+        if (isTurningLeft) {
+            this.curFrame = 1; 
+        } else if (isTurningRight) {
+            this.curFrame = 2;
+        } else {
+            this.curFrame = 0;
+        }
+    }
+}
 
 function init () {
     gui.add(camera, 'near', 0.0001, 0.03);
@@ -171,6 +204,8 @@ function processInput () {
     bgArea.x2 = bgArea.x1 + t;
 }
 
+let playerKart = new PlayerKartSprite(blueFalcon, 3, viewCtx);
+
 function loop () {
     stats.begin();
 
@@ -233,6 +268,8 @@ function loop () {
     }
 
     viewCtx.putImageData(stageImgData, 0, 0);
+    playerKart.render();
+    playerKart.update();
 
     processInput();
 
